@@ -50,6 +50,7 @@
     display: flex; align-items: flex-end; justify-content: center;
   }
   .mole img { height: 100%; max-width: 100%; object-fit: contain; object-position: bottom; display: block; pointer-events: none; }
+  .mole img.bigger { height: 118%; max-width: none; } /* IMG_2041（minion1）は細長く小さく見えるので大きめに */
   .big img { height: 140px; display: block; }
   .mole.up { transform: translate(-50%, 8%); }
   .mole.hit { transform: translate(-50%, 8%) scale(.85, .7); transition: transform .08s; }
@@ -217,7 +218,8 @@
     if (!free.length) return;
     const h = free[Math.floor(Math.random() * free.length)];
     h.up = true;
-    h.mole.innerHTML = `<img src="${MOLES[Math.floor(Math.random() * MOLES.length)]}" alt="">`;
+    const n = Math.floor(Math.random() * MOLES.length);
+    h.mole.innerHTML = `<img src="${MOLES[n]}" alt=""${n === 0 ? ' class="bigger"' : ''}>`;
     h.mole.classList.remove('hit');
     h.mole.classList.add('up');
     sfx.up();
