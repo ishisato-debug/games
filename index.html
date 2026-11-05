@@ -23,7 +23,8 @@
     transition: transform .06s, box-shadow .06s;
   }
   .card:active { transform: translateY(4px); box-shadow: 0 2px 0 #c99400, 0 3px 6px rgba(0, 0, 0, .18); }
-  .card .icon { font-size: 56px; line-height: 1; }
+  .card .icon { font-size: 56px; line-height: 1; width: 72px; flex-shrink: 0; display: flex; justify-content: center; }
+  .card .icon img { width: 72px; display: block; }
   .card .name { font-size: 24px; font-weight: 800; }
   .card .desc { font-size: 14px; margin-top: 2px; opacity: .8; }
 </style>
@@ -33,7 +34,7 @@
   <h1>🎮 ゲームあそび</h1>
   <div class="list">
     <a class="card" href="run/">
-      <div class="icon">🐰</div>
+      <div class="icon"><img src="run/img/character.png" alt=""></div>
       <div><div class="name">シナモンダッシュ</div><div class="desc">タップでジャンプ！くだものをあつめよう</div></div>
     </a>
     <a class="card" href="mogura/">
