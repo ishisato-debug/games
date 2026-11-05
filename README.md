@@ -6,7 +6,7 @@
 
 ## ゲーム一覧
 
-- **シナモンダッシュ**: タップでジャンプ！くだものを集めてゴールをめざそう
+- **シナモンのフルーツあつめ**: タップでジャンプ！くだものを集めてゴールをめざそう
   https://ishisato-debug.github.io/games/run/
 - **ミニオンたたき**: 出てきたミニオンをタッチ！
   https://ishisato-debug.github.io/games/mogura/

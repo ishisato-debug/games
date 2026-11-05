@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>シナモンダッシュ</title>
+<title>シナモンのフルーツあつめ</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; overflow: hidden; }
@@ -38,6 +38,12 @@
   .progress .flag { position: absolute; top: 50%; right: -14px; transform: translateY(-60%); font-size: 26px; line-height: 1; }
   .result { font-size: 40px; font-weight: 800; color: #4a3500; }
   .stars { font-size: 48px; letter-spacing: 4px; }
+  .fruits {
+    display: grid; grid-template-columns: repeat(3, auto); gap: 6px 22px;
+    background: rgba(255, 255, 255, .85); border-radius: 18px; padding: 12px 20px;
+    font-size: 28px; font-weight: 800; color: #4a3500; font-variant-numeric: tabular-nums;
+  }
+  .fruits[hidden] { display: none; }
   .icon-btn {
     border: 0; background: rgba(255, 255, 255, .85); border-radius: 999px;
     width: 48px; height: 48px; font-size: 24px; cursor: pointer; text-decoration: none;
@@ -56,6 +62,11 @@
     box-shadow: 0 6px 0 #c99400, 0 8px 12px rgba(0, 0, 0, .2); cursor: pointer;
   }
   .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #c99400; }
+  .home-btn {
+    border-radius: 999px; padding: 12px 32px; font-size: 20px; font-weight: 800; text-decoration: none;
+    color: #4a3500; background: #fff; box-shadow: 0 5px 0 #c9d3e0, 0 7px 10px rgba(0, 0, 0, .15);
+  }
+  .home-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #c9d3e0; }
   @keyframes bounce { 50% { transform: translateY(-14px); } }
 </style>
 </head>
@@ -78,8 +89,10 @@
 <div class="overlay" id="overlay">
   <div class="big" id="bigIcon">🐰</div>
   <div class="result" id="result" hidden></div>
+  <div class="fruits" id="fruits" hidden></div>
   <div class="stars" id="stars" hidden></div>
   <button class="start-btn" id="startBtn">はじめる</button>
+  <a class="home-btn" href="../">🏠 ホームにもどる</a>
 </div>
 
 <script>
@@ -95,6 +108,7 @@
   const bigIcon = document.getElementById('bigIcon');
   const resultEl = document.getElementById('result');
   const starsEl = document.getElementById('stars');
+  const fruitsEl = document.getElementById('fruits');
   const GOAL = 25; // ゴールまでの距離（画面の横幅25個ぶん、だいたい1分）
 
   function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
@@ -157,6 +171,7 @@
   const OBSTACLES = ['🌵', '🪨'];
   let playing = false;
   let player, items, clouds, hills, speed, distance, nextSpawn, score, lastTime;
+  let counts = {}; // くだものごとの数
   let runPhase = 0;
   let goalPlaced = false;
 
@@ -180,6 +195,7 @@
     nextSpawn = W * 0.6;
     score = 0;
     scoreEl.textContent = score;
+    counts = {};
     goalPlaced = false;
     renderProgress();
   }
@@ -247,6 +263,7 @@
         it.got = true;
         it.pop = 0;
         score++;
+        counts[it.e] = (counts[it.e] || 0) + 1;
         scoreEl.textContent = score;
         if (score % 10 === 0) sfx.yay(); else sfx.fruit();
       }
@@ -406,8 +423,11 @@
     // 星はかならず1つ以上（がんばったね）
     const stars = score >= 30 ? 3 : score >= 15 ? 2 : 1;
     bigIcon.textContent = '🎉';
-    resultEl.textContent = `ゴール！ 🍎 ${score} こ`;
+    resultEl.textContent = `ゴール！ ごうけい ${score} こ`;
     resultEl.hidden = false;
+    const got = FRUITS.filter(f => counts[f]);
+    fruitsEl.innerHTML = got.map(f => `<div>${f} ${counts[f]}</div>`).join('');
+    fruitsEl.hidden = got.length === 0;
     starsEl.textContent = '⭐'.repeat(stars);
     starsEl.hidden = false;
     startBtn.textContent = 'もういっかい';

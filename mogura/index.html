@@ -84,6 +84,11 @@
     box-shadow: 0 6px 0 #c99400, 0 8px 12px rgba(0, 0, 0, .2); cursor: pointer;
   }
   .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #c99400; }
+  .home-btn {
+    border-radius: 999px; padding: 12px 32px; font-size: 20px; font-weight: 800; text-decoration: none;
+    color: #4a3500; background: #fff; box-shadow: 0 5px 0 #c9d3e0, 0 7px 10px rgba(0, 0, 0, .15);
+  }
+  .home-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #c9d3e0; }
   @keyframes bounce { 50% { transform: translateY(-14px); } }
 </style>
 </head>
@@ -105,6 +110,7 @@
   <div class="result" id="result" hidden></div>
   <div class="stars" id="stars" hidden></div>
   <button class="start-btn" id="startBtn">はじめる</button>
+  <a class="home-btn" href="../">🏠 ホームにもどる</a>
 </div>
 
 <script>
