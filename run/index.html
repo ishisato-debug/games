@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>シナモンダッシュ</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background: #8fd3ff;
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Segoe UI", sans-serif;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; }
+  .hud {
+    position: fixed; top: 12px; left: 12px; right: 12px;
+    display: flex; justify-content: space-between; align-items: center; pointer-events: none;
+  }
+  .score {
+    background: rgba(255, 255, 255, .85); border-radius: 999px; padding: 6px 16px;
+    font-size: 28px; font-weight: 800; color: #4a3500; font-variant-numeric: tabular-nums;
+  }
+  .btns { display: flex; gap: 8px; pointer-events: auto; }
+  .progress {
+    flex: 1; position: relative; height: 14px; margin: 0 14px 0 18px;
+    background: rgba(255, 255, 255, .7); border-radius: 999px;
+  }
+  .progress .fill { height: 100%; width: 0; background: #ffc919; border-radius: 999px; }
+  .progress .runner {
+    position: absolute; top: 50%; left: 0; transform: translate(-50%, -55%);
+    font-size: 26px; line-height: 1;
+  }
+  .progress .runner img { height: 30px; display: block; }
+  .big img { height: 110px; display: block; }
+  .progress .flag { position: absolute; top: 50%; right: -14px; transform: translateY(-60%); font-size: 26px; line-height: 1; }
+  .result { font-size: 40px; font-weight: 800; color: #4a3500; }
+  .stars { font-size: 48px; letter-spacing: 4px; }
+  .icon-btn {
+    border: 0; background: rgba(255, 255, 255, .85); border-radius: 999px;
+    width: 48px; height: 48px; font-size: 24px; cursor: pointer; text-decoration: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    background: rgba(143, 211, 255, .6);
+  }
+  .overlay.hidden { display: none; }
+  .big { font-size: 96px; line-height: 1; animation: bounce 1s infinite; }
+  .start-btn {
+    border: 0; border-radius: 999px; padding: 18px 48px; font-size: 26px; font-weight: 800;
+    color: #4a3500; background: linear-gradient(180deg, #ffe066 0%, #ffc919 100%);
+    box-shadow: 0 6px 0 #c99400, 0 8px 12px rgba(0, 0, 0, .2); cursor: pointer;
+  }
+  .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #c99400; }
+  @keyframes bounce { 50% { transform: translateY(-14px); } }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div class="hud">
+  <div class="score">🍎 <span id="score">0</span></div>
+  <div class="progress">
+    <div class="fill" id="progFill"></div>
+    <div class="runner" id="progRunner">🐰</div>
+    <div class="flag">🏁</div>
+  </div>
+  <div class="btns">
+    <button class="icon-btn" id="soundBtn">🔊</button>
+    <a class="icon-btn" href="../">🏠</a>
+  </div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="big" id="bigIcon">🐰</div>
+  <div class="result" id="result" hidden></div>
+  <div class="stars" id="stars" hidden></div>
+  <button class="start-btn" id="startBtn">はじめる</button>
+</div>
+
+<script>
+  const SOUND_KEY = 'gamesSound';
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const scoreEl = document.getElementById('score');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const soundBtn = document.getElementById('soundBtn');
+  const progFill = document.getElementById('progFill');
+  const progRunner = document.getElementById('progRunner');
+  const bigIcon = document.getElementById('bigIcon');
+  const resultEl = document.getElementById('result');
+  const starsEl = document.getElementById('stars');
+  const GOAL = 25; // ゴールまでの距離（画面の横幅25個ぶん、だいたい1分）
+
+  function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function save(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+
+  // ---------- 効果音 ----------
+  let soundOn = load(SOUND_KEY) !== 'off';
+  let audioCtx = null;
+  function ac() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  function sweep(from, to, dur, type = 'sine', vol = 0.25, delay = 0) {
+    if (!soundOn) return;
+    const a = ac();
+    const t = a.currentTime + delay;
+    const osc = a.createOscillator();
+    const gain = a.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(from, t);
+    osc.frequency.exponentialRampToValueAtTime(to, t + dur);
+    gain.gain.setValueAtTime(vol, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(gain).connect(a.destination);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+  const sfx = {
+    jump: () => sweep(300, 700, 0.12, 'triangle', 0.18),
+    fruit: () => { sweep(1100, 1600, 0.06, 'sine', 0.25); sweep(1600, 2200, 0.08, 'sine', 0.2, 0.06); },
+    bump: () => sweep(220, 90, 0.25, 'sine', 0.35),
+    yay: () => [523, 659, 784, 1047].forEach((f, i) => sweep(f, f, 0.16, 'triangle', 0.2, i * 0.09)),
+  };
+  function renderSound() { soundBtn.textContent = soundOn ? '🔊' : '🔇'; }
+  soundBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    soundOn = !soundOn;
+    save(SOUND_KEY, soundOn ? 'on' : 'off');
+    renderSound();
+  });
+
+  // ---------- 画面サイズ ----------
+  let W = 0, H = 0, groundY = 0, S = 0;
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    groundY = H * 0.78;
+    S = Math.min(H * 0.13, W * 0.16); // キャラの大きさ
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ---------- ゲームの状態 ----------
+  const FRUITS = ['🍎', '🍓', '🍌', '🍇', '🍊', '🍒'];
+  const OBSTACLES = ['🌵', '🪨', '🍄'];
+  let playing = false;
+  let player, items, clouds, hills, speed, distance, nextSpawn, score, lastTime;
+  let runPhase = 0;
+  let goalPlaced = false;
+
+  // img/character.png があればキャラをその絵にする（無ければ🐰）
+  let charImg = null;
+  const img = new Image();
+  img.onload = () => {
+    charImg = img;
+    progRunner.innerHTML = '<img src="img/character.png" alt="">';
+    if (!playing) bigIcon.innerHTML = '<img src="img/character.png" alt="">';
+  };
+  img.src = 'img/character.png';
+
+  function reset() {
+    player = { y: 0, vy: 0, jumps: 0, hitTimer: 0 };
+    items = [];
+    clouds = Array.from({ length: 4 }, (_, i) => ({ x: i * W / 3, y: H * (0.1 + Math.random() * 0.25) }));
+    hills = Array.from({ length: 3 }, (_, i) => ({ x: i * W * 0.6, r: W * (0.25 + Math.random() * 0.15) }));
+    speed = 0;
+    distance = 0;
+    nextSpawn = W * 0.6;
+    score = 0;
+    scoreEl.textContent = score;
+    goalPlaced = false;
+    renderProgress();
+  }
+
+  function renderProgress() {
+    const p = Math.min(distance / (W * GOAL), 1) * 100;
+    progFill.style.width = p + '%';
+    progRunner.style.left = p + '%';
+  }
+
+  function jump() {
+    if (!playing) return;
+    if (player.jumps < 2) { // 2段ジャンプまで（ふわっと長めに浮く）
+      player.vy = -H * (player.jumps === 0 ? 1.0 : 0.85);
+      player.jumps++;
+      sfx.jump();
+    }
+  }
+
+  function spawn() {
+    const x = W + S;
+    if (Math.random() < 0.45) {
+      items.push({ kind: 'obstacle', x, y: 0, e: OBSTACLES[Math.floor(Math.random() * OBSTACLES.length)], hit: false });
+      // 障害物の上にくだものを置いて、ジャンプしたくなるように
+      if (Math.random() < 0.6) items.push({ kind: 'fruit', x, y: S * 1.8, e: FRUITS[Math.floor(Math.random() * FRUITS.length)] });
+    } else {
+      const n = 1 + Math.floor(Math.random() * 3);
+      const high = Math.random() < 0.4 ? S * 1.6 : S * 0.3;
+      for (let i = 0; i < n; i++) {
+        items.push({ kind: 'fruit', x: x + i * S * 1.1, y: high, e: FRUITS[Math.floor(Math.random() * FRUITS.length)] });
+      }
+    }
+    nextSpawn = distance + W * (0.45 + Math.random() * 0.4);
+  }
+
+  function update(dt) {
+    // ゆっくり始まって、少しずつ速く（上限あり）
+    const target = W * Math.min(0.32 + distance / (W * 400), 0.5);
+    speed += (target - speed) * Math.min(dt * 2, 1);
+    const v = player.hitTimer > 0 ? speed * 0.5 : speed;
+    distance += v * dt;
+    runPhase += v * dt / (S * 1.2);
+
+    // ジャンプ
+    player.vy += H * 1.67 * dt;
+    player.y -= player.vy * dt;
+    if (player.y <= 0) { player.y = 0; player.vy = 0; player.jumps = 0; }
+    if (player.hitTimer > 0) player.hitTimer -= dt;
+
+    // ゴール手前では何も出さず、ゴールの旗を出す
+    const goalDist = W * GOAL;
+    if (distance >= nextSpawn && nextSpawn < goalDist - W * 1.5) spawn();
+    if (!goalPlaced && distance >= goalDist - W) {
+      items.push({ kind: 'goal', x: W + S });
+      goalPlaced = true;
+    }
+    renderProgress();
+
+    const px = W * 0.2;
+    for (const it of items) {
+      it.x -= v * dt;
+      const dx = Math.abs(it.x - px);
+      const dy = Math.abs(it.y - player.y);
+      if (it.kind === 'fruit' && !it.got && dx < S * 0.75 && dy < S * 0.9) {
+        it.got = true;
+        it.pop = 0;
+        score++;
+        scoreEl.textContent = score;
+        if (score % 10 === 0) sfx.yay(); else sfx.fruit();
+      }
+      // ぶつかってもゲームオーバーにはしない（少しゆっくりになるだけ）
+      if (it.kind === 'obstacle' && !it.hit && player.hitTimer <= 0 && dx < S * 0.55 && player.y < S * 0.6) {
+        it.hit = true;
+        player.hitTimer = 1;
+        sfx.bump();
+      }
+      if (it.got) it.pop += dt;
+      if (it.kind === 'goal' && it.x <= px) { finish(); return; }
+    }
+    items = items.filter(it => it.x > -S * 2 && !(it.got && it.pop > 0.3));
+
+    for (const c of clouds) {
+      c.x -= v * 0.15 * dt;
+      if (c.x < -W * 0.2) { c.x = W * 1.1; c.y = H * (0.1 + Math.random() * 0.25); }
+    }
+    for (const h of hills) {
+      h.x -= v * 0.35 * dt;
+      if (h.x < -h.r * 1.2) { h.x = W + h.r; h.r = W * (0.25 + Math.random() * 0.15); }
+    }
+  }
+
+  function emoji(e, x, y, size, scale = 1, alpha = 1) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.font = `${size}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(e, 0, 0);
+    ctx.restore();
+  }
+
+  function draw(t) {
+    // 空
+    const sky = ctx.createLinearGradient(0, 0, 0, groundY);
+    sky.addColorStop(0, '#6ec6ff');
+    sky.addColorStop(1, '#c9ecff');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    // 太陽
+    ctx.fillStyle = '#ffe066';
+    ctx.beginPath();
+    ctx.arc(W * 0.85, H * 0.15, S * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 雲
+    ctx.fillStyle = 'rgba(255,255,255,.95)';
+    for (const c of clouds) {
+      for (const [ox, oy, r] of [[0, 0, 0.5], [0.45, -0.15, 0.6], [0.9, 0, 0.45]]) {
+        ctx.beginPath();
+        ctx.arc(c.x + ox * S, c.y + oy * S, r * S, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 丘
+    ctx.fillStyle = '#7bd389';
+    for (const h of hills) {
+      ctx.beginPath();
+      ctx.arc(h.x, groundY + h.r * 0.4, h.r, Math.PI, 0);
+      ctx.fill();
+    }
+
+    // 地面
+    ctx.fillStyle = '#5cb85c';
+    ctx.fillRect(0, groundY, W, H - groundY);
+    ctx.fillStyle = '#c98b4f';
+    ctx.fillRect(0, groundY + S * 0.25, W, H - groundY);
+    ctx.fillStyle = '#b5773e';
+    const stripe = S * 0.8;
+    const off = distance % (stripe * 2);
+    for (let x = -off; x < W; x += stripe * 2) ctx.fillRect(x, groundY + S * 0.5, stripe, S * 0.12);
+
+    // 障害物とくだもの
+    for (const it of items) {
+      if (it.kind === 'goal') {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(it.x - S * 0.06, groundY - S * 2.6, S * 0.12, S * 2.6);
+        emoji('🏁', it.x + S * 0.45, groundY - S * 1.7, S * 1.1);
+      } else if (it.kind === 'obstacle') {
+        emoji(it.e, it.x, groundY + S * 0.1, S * 0.9);
+      } else if (it.got) {
+        const p = it.pop / 0.3;
+        emoji(it.e, it.x, groundY - it.y - p * S * 0.6, S * 0.7, 1 + p * 0.6, 1 - p);
+      } else {
+        const bob = Math.sin(t / 200 + it.x / 50) * S * 0.06;
+        emoji(it.e, it.x, groundY - it.y + bob, S * 0.7);
+      }
+    }
+
+    // うさぎ（ぶつかった後はチカチカ点滅）
+    const px = W * 0.2;
+    const blink = player.hitTimer > 0 && Math.floor(t / 100) % 2 === 0;
+    if (!blink) {
+      ctx.fillStyle = 'rgba(0,0,0,.15)';
+      ctx.beginPath();
+      ctx.ellipse(px, groundY + S * 0.05, S * 0.4 / (1 + player.y / H), S * 0.08, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (charImg) drawChar(px, groundY - player.y + S * 0.08, t);
+      else {
+        const run = player.y === 0 && playing ? Math.abs(Math.sin(t / 90)) * S * 0.08 : 0;
+        emoji('🐰', px, groundY - player.y - run + S * 0.1, S);
+      }
+    }
+  }
+
+  // 用意した絵を、左右にカタカタ傾けて走っているように見せる
+  function drawChar(x, y, t) {
+    const h = S * 1.3;
+    const w = h * charImg.width / charImg.height;
+    const step = Math.sin(runPhase * Math.PI);
+    let angle = 0, hop = 0, sx = 1, sy = 1;
+    if (player.y > 0) {
+      angle = Math.max(-1, Math.min(1, player.vy / H)) * 0.3; // 上昇で反る・落下で前のめり
+    } else if (playing) {
+      angle = Math.tanh(step * 4) * 0.17; // 約±10°をカタッカタッと切り替える
+      hop = Math.abs(step) * S * 0.12;
+      const land = 1 - Math.abs(step); // 着地の瞬間に少しつぶれる
+      sx = 1 + land * 0.06;
+      sy = 1 - land * 0.08;
+    }
+    if (player.hitTimer > 0) angle += Math.sin(t / 40) * 0.35 * player.hitTimer;
+    ctx.save();
+    ctx.translate(x, y - hop);
+    ctx.rotate(angle);
+    ctx.scale(sx, sy);
+    ctx.drawImage(charImg, -w / 2, -h, w, h);
+    ctx.restore();
+  }
+
+  function loop(t) {
+    const dt = Math.min((t - lastTime) / 1000, 0.05);
+    lastTime = t;
+    if (playing) update(dt);
+    draw(t);
+    requestAnimationFrame(loop);
+  }
+
+  function start() {
+    ac();
+    reset();
+    playing = true;
+    overlay.classList.add('hidden');
+  }
+
+  function finish() {
+    playing = false;
+    player.y = 0;
+    player.vy = 0;
+    player.hitTimer = 0;
+    sfx.yay();
+    // 星はかならず1つ以上（がんばったね）
+    const stars = score >= 30 ? 3 : score >= 15 ? 2 : 1;
+    bigIcon.textContent = '🎉';
+    resultEl.textContent = `ゴール！ 🍎 ${score} こ`;
+    resultEl.hidden = false;
+    starsEl.textContent = '⭐'.repeat(stars);
+    starsEl.hidden = false;
+    startBtn.textContent = 'もういっかい';
+    overlay.classList.remove('hidden');
+  }
+
+  startBtn.addEventListener('click', e => { e.stopPropagation(); start(); });
+  window.addEventListener('pointerdown', e => {
+    if (e.target.closest('button, a')) return;
+    e.preventDefault();
+    jump();
+  });
+  window.addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowUp') jump(); });
+
+  renderSound();
+  reset();
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>もぐらたたき</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: linear-gradient(180deg, #8fd3ff 0%, #c9ecff 30%, #7bd389 30%, #5cb85c 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Segoe UI", sans-serif;
+    display: flex; justify-content: center;
+    padding: 12px 16px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    overflow: hidden;
+  }
+  .app { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 16px; }
+  .hud { display: flex; justify-content: space-between; align-items: center; }
+  .pill {
+    background: rgba(255, 255, 255, .85); border-radius: 999px; padding: 6px 16px;
+    font-size: 28px; font-weight: 800; color: #4a3500; font-variant-numeric: tabular-nums;
+  }
+  .btns { display: flex; gap: 8px; }
+  .icon-btn {
+    border: 0; background: rgba(255, 255, 255, .85); border-radius: 999px;
+    width: 48px; height: 48px; font-size: 24px; cursor: pointer; text-decoration: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .timebar { height: 14px; background: rgba(255, 255, 255, .6); border-radius: 999px; overflow: hidden; }
+  .timebar div { height: 100%; width: 100%; background: #ffc919; border-radius: 999px; transition: width .2s linear; }
+
+  .field { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4% 6%; margin-top: 4vh; }
+  .hole { position: relative; aspect-ratio: 1 / 1; }
+  .hole::after { /* 穴 */
+    content: ''; position: absolute; left: 4%; right: 4%; bottom: 6%; height: 34%;
+    background: radial-gradient(ellipse at center, #3b2414 0%, #5a3a22 70%, #7a5232 100%);
+    border-radius: 50%; z-index: 0;
+  }
+  .mask { /* もぐらが穴に隠れるように下を切る */
+    position: absolute; left: 0; right: 0; top: -40%; bottom: 23%; overflow: hidden; z-index: 1;
+  }
+  .mole {
+    position: absolute; left: 50%; bottom: 0; width: 90%; aspect-ratio: 1 / 1;
+    transform: translate(-50%, 110%); transition: transform .18s ease-out;
+    border: 0; padding: 0; background: none; cursor: pointer;
+    font-size: min(18vw, 96px); line-height: 1;
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  .mole.up { transform: translate(-50%, 8%); }
+  .mole.hit { transform: translate(-50%, 8%) scale(.85, .7); transition: transform .08s; }
+  .hole .front { /* 穴のふち（手前） */
+    position: absolute; left: 0; right: 0; bottom: 0; height: 26%;
+    background: #6b4428; border-radius: 0 0 50% 50% / 0 0 100% 100%; z-index: 2;
+    box-shadow: inset 0 6px 0 #8a5a36;
+  }
+  .fx {
+    position: absolute; left: 50%; top: 10%; z-index: 3; pointer-events: none;
+    font-size: min(12vw, 64px); transform: translate(-50%, 0);
+    animation: fx .5s ease-out forwards;
+  }
+  @keyframes fx {
+    0% { opacity: 1; transform: translate(-50%, 0) scale(.6); }
+    40% { opacity: 1; transform: translate(-50%, -20%) scale(1.3); }
+    100% { opacity: 0; transform: translate(-50%, -60%) scale(1); }
+  }
+
+  .overlay {
+    position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    background: rgba(143, 211, 255, .65);
+  }
+  .overlay.hidden { display: none; }
+  .big { font-size: 96px; line-height: 1; animation: bounce 1s infinite; }
+  .result { font-size: 40px; font-weight: 800; color: #4a3500; }
+  .stars { font-size: 48px; letter-spacing: 4px; }
+  .start-btn {
+    border: 0; border-radius: 999px; padding: 18px 48px; font-size: 26px; font-weight: 800;
+    color: #4a3500; background: linear-gradient(180deg, #ffe066 0%, #ffc919 100%);
+    box-shadow: 0 6px 0 #c99400, 0 8px 12px rgba(0, 0, 0, .2); cursor: pointer;
+  }
+  .start-btn:active { transform: translateY(4px); box-shadow: 0 2px 0 #c99400; }
+  @keyframes bounce { 50% { transform: translateY(-14px); } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="hud">
+    <div class="pill">🔨 <span id="score">0</span></div>
+    <div class="btns">
+      <button class="icon-btn" id="soundBtn">🔊</button>
+      <a class="icon-btn" href="../">🏠</a>
+    </div>
+  </div>
+  <div class="timebar"><div id="timebar"></div></div>
+  <div class="field" id="field"></div>
+</div>
+
+<div class="overlay" id="overlay">
+  <div class="big" id="bigIcon">🐹</div>
+  <div class="result" id="result" hidden></div>
+  <div class="stars" id="stars" hidden></div>
+  <button class="start-btn" id="startBtn">はじめる</button>
+</div>
+
+<script>
+  const SOUND_KEY = 'gamesSound';
+  const HOLES = 9;
+  const GAME_TIME = 30; // 秒
+  const MOLES = ['🐹', '🐹', '🐹', '🐭', '🐰', '🐻'];
+
+  const field = document.getElementById('field');
+  const scoreEl = document.getElementById('score');
+  const timebar = document.getElementById('timebar');
+  const overlay = document.getElementById('overlay');
+  const bigIcon = document.getElementById('bigIcon');
+  const resultEl = document.getElementById('result');
+  const starsEl = document.getElementById('stars');
+  const startBtn = document.getElementById('startBtn');
+  const soundBtn = document.getElementById('soundBtn');
+
+  function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function save(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+
+  // ---------- 効果音 ----------
+  let soundOn = load(SOUND_KEY) !== 'off';
+  let audioCtx = null;
+  function ac() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  function sweep(from, to, dur, type = 'sine', vol = 0.25, delay = 0) {
+    if (!soundOn) return;
+    const a = ac();
+    const t = a.currentTime + delay;
+    const osc = a.createOscillator();
+    const gain = a.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(from, t);
+    osc.frequency.exponentialRampToValueAtTime(to, t + dur);
+    gain.gain.setValueAtTime(vol, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(gain).connect(a.destination);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+  function click(vol = 0.3) { // ぱちっとした短いノイズ
+    if (!soundOn) return;
+    const a = ac();
+    const len = Math.floor(a.sampleRate * 0.025);
+    const buf = a.createBuffer(1, len, a.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = a.createBufferSource();
+    const hp = a.createBiquadFilter();
+    const gain = a.createGain();
+    src.buffer = buf;
+    hp.type = 'highpass';
+    hp.frequency.value = 1500;
+    gain.gain.value = vol;
+    src.connect(hp).connect(gain).connect(a.destination);
+    src.start();
+  }
+  const sfx = {
+    up: () => sweep(500, 800, 0.08, 'sine', 0.08),
+    hit: () => { click(0.35); sweep(1000, 260, 0.08, 'square', 0.12); sweep(1400, 1900, 0.06, 'sine', 0.15, 0.06); },
+    yay: () => [523, 659, 784, 1047].forEach((f, i) => sweep(f, f, 0.18, 'triangle', 0.2, i * 0.1)),
+  };
+  function renderSound() { soundBtn.textContent = soundOn ? '🔊' : '🔇'; }
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    save(SOUND_KEY, soundOn ? 'on' : 'off');
+    renderSound();
+  });
+
+  // ---------- 穴をつくる ----------
+  const holes = [];
+  for (let i = 0; i < HOLES; i++) {
+    const hole = document.createElement('div');
+    hole.className = 'hole';
+    const mask = document.createElement('div');
+    mask.className = 'mask';
+    const mole = document.createElement('button');
+    mole.className = 'mole';
+    mask.appendChild(mole);
+    const front = document.createElement('div');
+    front.className = 'front';
+    hole.append(mask, front);
+    field.appendChild(hole);
+    const h = { hole, mole, up: false, timer: null };
+    mole.addEventListener('pointerdown', e => { e.preventDefault(); whack(h); });
+    holes.push(h);
+  }
+
+  // ---------- ゲーム ----------
+  let playing = false;
+  let score = 0;
+  let endAt = 0;
+  let spawnTimer = null;
+  let clockTimer = null;
+
+  function popUp() {
+    const free = holes.filter(h => !h.up);
+    if (!free.length) return;
+    const h = free[Math.floor(Math.random() * free.length)];
+    h.up = true;
+    h.mole.textContent = MOLES[Math.floor(Math.random() * MOLES.length)];
+    h.mole.classList.remove('hit');
+    h.mole.classList.add('up');
+    sfx.up();
+    // 4〜5歳でも間に合うように、ゆっくり出ている
+    h.timer = setTimeout(() => hide(h), 1500 + Math.random() * 700);
+  }
+
+  function hide(h) {
+    clearTimeout(h.timer);
+    h.up = false;
+    h.mole.classList.remove('up', 'hit');
+  }
+
+  function whack(h) {
+    if (!playing || !h.up || h.mole.classList.contains('hit')) return;
+    clearTimeout(h.timer);
+    h.mole.classList.add('hit');
+    score++;
+    scoreEl.textContent = score;
+    if (score % 10 === 0) sfx.yay(); else sfx.hit();
+    const fx = document.createElement('div');
+    fx.className = 'fx';
+    fx.textContent = ['⭐', '✨', '💥'][Math.floor(Math.random() * 3)];
+    h.hole.appendChild(fx);
+    setTimeout(() => fx.remove(), 500);
+    setTimeout(() => hide(h), 250);
+  }
+
+  function scheduleSpawn() {
+    // 時間がたつと少しだけ出る間隔が短くなる
+    const left = (endAt - performance.now()) / 1000;
+    const gap = left > 15 ? 1000 : 750;
+    spawnTimer = setTimeout(() => {
+      if (!playing) return;
+      popUp();
+      if (left < 15 && Math.random() < 0.3) popUp();
+      scheduleSpawn();
+    }, gap * (0.7 + Math.random() * 0.6));
+  }
+
+  function tick() {
+    const left = Math.max(0, endAt - performance.now());
+    timebar.style.width = (left / (GAME_TIME * 1000) * 100) + '%';
+    if (left <= 0) finish();
+  }
+
+  function start() {
+    ac();
+    holes.forEach(hide);
+    score = 0;
+    scoreEl.textContent = score;
+    playing = true;
+    endAt = performance.now() + GAME_TIME * 1000;
+    overlay.classList.add('hidden');
+    timebar.style.width = '100%';
+    clockTimer = setInterval(tick, 200);
+    setTimeout(popUp, 400);
+    scheduleSpawn();
+  }
+
+  function finish() {
+    playing = false;
+    clearInterval(clockTimer);
+    clearTimeout(spawnTimer);
+    holes.forEach(hide);
+    sfx.yay();
+    // 星はかならず1つ以上（がんばったね）
+    const stars = score >= 20 ? 3 : score >= 10 ? 2 : 1;
+    bigIcon.textContent = '🎉';
+    resultEl.textContent = `${score} ひき！`;
+    resultEl.hidden = false;
+    starsEl.textContent = '⭐'.repeat(stars);
+    starsEl.hidden = false;
+    startBtn.textContent = 'もういっかい';
+    overlay.classList.remove('hidden');
+  }
+
+  startBtn.addEventListener('click', start);
+  renderSound();
+</script>
+</body>
+</html>
