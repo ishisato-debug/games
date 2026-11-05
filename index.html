@@ -62,14 +62,24 @@
     aspect-ratio: 1 / 1; width: 100%;
   }
   .cell {
-    border: 1px solid var(--cell-border); background: var(--cell); color: var(--text);
-    border-radius: 10px; font-size: clamp(18px, 6vw, 28px); font-weight: 700;
+    border: 0; color: #4a3500;
+    background: linear-gradient(180deg, #ffe066 0%, #ffc919 100%);
+    box-shadow: 0 5px 0 #c99400, 0 7px 10px rgba(0, 0, 0, .18), inset 0 2px 0 rgba(255, 255, 255, .6);
+    border-radius: 12px; font-size: clamp(18px, 6vw, 28px); font-weight: 800;
     font-variant-numeric: tabular-nums; cursor: pointer; padding: 0;
-    transition: background .12s, color .12s, transform .06s;
+    transition: transform .06s, box-shadow .06s;
   }
-  .cell:active { transform: scale(.94); }
-  .cell.done { background: var(--done); color: var(--done-text); border-color: transparent; cursor: default; }
-  .cell.miss { animation: shake .25s; border-color: var(--miss); color: var(--miss); }
+  .cell:active {
+    transform: translateY(4px);
+    box-shadow: 0 1px 0 #c99400, 0 2px 4px rgba(0, 0, 0, .18), inset 0 2px 0 rgba(255, 255, 255, .6);
+  }
+  .cell.done { animation: pop .18s ease-out forwards; pointer-events: none; }
+  @keyframes pop {
+    0% { transform: translateY(4px) scale(1); opacity: 1; }
+    40% { transform: translateY(4px) scale(1.15); opacity: .8; }
+    100% { transform: translateY(4px) scale(.3); opacity: 0; }
+  }
+  .cell.miss { animation: shake .25s; background: linear-gradient(180deg, #ff8a8a 0%, #e5484d 100%); color: #fff; }
   @keyframes shake {
     0%, 100% { transform: translateX(0); }
     25% { transform: translateX(-4px); }
@@ -164,8 +174,40 @@
     osc.start(t);
     osc.stop(t + duration);
   }
+  // ぱちっと弾ける音：高い音が一瞬で下がる＋短いノイズ
+  function pop(n) {
+    if (!soundOn) return;
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const t = audioCtx.currentTime;
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(900 + n * 25, t);
+    osc.frequency.exponentialRampToValueAtTime(250, t + 0.05);
+    gain.gain.setValueAtTime(0.35, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + 0.07);
+
+    const len = Math.floor(audioCtx.sampleRate * 0.02);
+    const buf = audioCtx.createBuffer(1, len, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const noise = audioCtx.createBufferSource();
+    const hp = audioCtx.createBiquadFilter();
+    const ngain = audioCtx.createGain();
+    noise.buffer = buf;
+    hp.type = 'highpass';
+    hp.frequency.value = 2000;
+    ngain.gain.value = 0.25;
+    noise.connect(hp).connect(ngain).connect(audioCtx.destination);
+    noise.start(t);
+  }
   const sfx = {
-    tap: n => beep(440 + n * 18, 0.08, 'triangle'),
+    tap: n => pop(n),
     miss: () => beep(140, 0.18, 'square', 0.08),
     clear: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'triangle'), i * 90)),
   };
