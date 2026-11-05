@@ -8,7 +8,7 @@
 
 - **シナモンダッシュ**: タップでジャンプ！くだものを集めてゴールをめざそう
   https://ishisato-debug.github.io/games/run/
-- **もぐらたたき**: 出てきたもぐらをタッチ！
+- **ミニオンたたき**: 出てきたミニオンをタッチ！
   https://ishisato-debug.github.io/games/mogura/
 - **Touch the Numbers**: 1〜25の数字を順番にタッチして、タイムを競うゲームです。
   https://ishisato-debug.github.io/games/touch-numbers/

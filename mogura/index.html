@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>もぐらたたき</title>
+<title>ミニオンたたき</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; }
@@ -49,6 +49,8 @@
     font-size: min(18vw, 96px); line-height: 1;
     display: flex; align-items: flex-end; justify-content: center;
   }
+  .mole img { height: 100%; max-width: 100%; object-fit: contain; object-position: bottom; display: block; pointer-events: none; }
+  .big img { height: 140px; display: block; }
   .mole.up { transform: translate(-50%, 8%); }
   .mole.hit { transform: translate(-50%, 8%) scale(.85, .7); transition: transform .08s; }
   .hole .front { /* 穴のふち（手前） */
@@ -109,7 +111,9 @@
   const SOUND_KEY = 'gamesSound';
   const HOLES = 9;
   const GAME_TIME = 30; // 秒
-  const MOLES = ['🐹', '🐹', '🐹', '🐭', '🐰', '🐻'];
+  // 出てくるキャラの絵（img/minion1.png 〜 minion7.png）
+  const MOLES = Array.from({ length: 7 }, (_, i) => `img/minion${i + 1}.png`);
+  MOLES.forEach(src => { new Image().src = src; }); // 先に読み込んでおく
 
   const field = document.getElementById('field');
   const scoreEl = document.getElementById('score');
@@ -207,7 +211,7 @@
     if (!free.length) return;
     const h = free[Math.floor(Math.random() * free.length)];
     h.up = true;
-    h.mole.textContent = MOLES[Math.floor(Math.random() * MOLES.length)];
+    h.mole.innerHTML = `<img src="${MOLES[Math.floor(Math.random() * MOLES.length)]}" alt="">`;
     h.mole.classList.remove('hit');
     h.mole.classList.add('up');
     sfx.up();
@@ -286,6 +290,7 @@
   }
 
   startBtn.addEventListener('click', start);
+  bigIcon.innerHTML = `<img src="${MOLES[1]}" alt="">`;
   renderSound();
 </script>
 </body>
