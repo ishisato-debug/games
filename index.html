@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Touch the Numbers</title>
+<style>
+  :root {
+    --bg: #f4f6fb;
+    --panel: #ffffff;
+    --text: #1d2433;
+    --muted: #6b7385;
+    --cell: #ffffff;
+    --cell-border: #d5dbe8;
+    --accent: #3b6ef5;
+    --done: #e3e8f2;
+    --done-text: #b3bccd;
+    --miss: #e5484d;
+    --gold: #e0a100;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c;
+      --panel: #1b2029;
+      --text: #e8ecf4;
+      --muted: #8d96a8;
+      --cell: #232a35;
+      --cell-border: #343d4c;
+      --accent: #6b93ff;
+      --done: #1a1f27;
+      --done-text: #3c4555;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Segoe UI", sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 16px;
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .app { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 14px; }
+  header { display: flex; align-items: center; justify-content: space-between; }
+  h1 { font-size: 20px; margin: 0; letter-spacing: .02em; }
+  .icon-btn {
+    border: 1px solid var(--cell-border); background: var(--panel); color: var(--text);
+    border-radius: 10px; padding: 6px 10px; font-size: 14px; cursor: pointer;
+  }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat { background: var(--panel); border-radius: 12px; padding: 10px 8px; text-align: center; }
+  .stat .label { font-size: 11px; color: var(--muted); }
+  .stat .value { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  #next { color: var(--accent); }
+  .board-wrap { position: relative; }
+  .board {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+    aspect-ratio: 1 / 1; width: 100%;
+  }
+  .cell {
+    border: 1px solid var(--cell-border); background: var(--cell); color: var(--text);
+    border-radius: 10px; font-size: clamp(18px, 6vw, 28px); font-weight: 700;
+    font-variant-numeric: tabular-nums; cursor: pointer; padding: 0;
+    transition: background .12s, color .12s, transform .06s;
+  }
+  .cell:active { transform: scale(.94); }
+  .cell.done { background: var(--done); color: var(--done-text); border-color: transparent; cursor: default; }
+  .cell.miss { animation: shake .25s; border-color: var(--miss); color: var(--miss); }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+  .overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 12px;
+    background: color-mix(in srgb, var(--bg) 85%, transparent);
+    backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    border-radius: 12px; text-align: center;
+  }
+  .overlay.hidden { display: none; }
+  .overlay .msg { font-size: 15px; color: var(--muted); }
+  .overlay .result { font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .overlay .best { color: var(--gold); font-weight: 800; font-size: 18px; }
+  .start-btn {
+    background: var(--accent); color: #fff; border: 0; border-radius: 999px;
+    padding: 14px 40px; font-size: 18px; font-weight: 700; cursor: pointer;
+  }
+  .hint { font-size: 12px; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Touch the Numbers</h1>
+    <button class="icon-btn" id="soundBtn">🔊 音ON</button>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="label">次</div><div class="value" id="next">1</div></div>
+    <div class="stat"><div class="label">タイム</div><div class="value" id="time">0.00</div></div>
+    <div class="stat"><div class="label">ベスト</div><div class="value" id="best">--</div></div>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+    <div class="overlay" id="overlay">
+      <div class="msg" id="msg">1から25まで順番にタッチ！</div>
+      <div class="result" id="result" hidden></div>
+      <div class="best" id="newBest" hidden>NEW BEST!</div>
+      <button class="start-btn" id="startBtn">スタート</button>
+    </div>
+  </div>
+
+  <div class="hint">ベスト記録はこの端末のブラウザに保存されます</div>
+</div>
+
+<script>
+  const SIZE = 25;
+  const BEST_KEY = 'touchNumbersBest';
+  const SOUND_KEY = 'touchNumbersSound';
+
+  const boardEl = document.getElementById('board');
+  const nextEl = document.getElementById('next');
+  const timeEl = document.getElementById('time');
+  const bestEl = document.getElementById('best');
+  const overlay = document.getElementById('overlay');
+  const msgEl = document.getElementById('msg');
+  const resultEl = document.getElementById('result');
+  const newBestEl = document.getElementById('newBest');
+  const startBtn = document.getElementById('startBtn');
+  const soundBtn = document.getElementById('soundBtn');
+
+  let next = 1;
+  let startTime = 0;
+  let timerId = null;
+  let playing = false;
+
+  // 保存の読み書き（使えない環境でも動くように）
+  function load(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
+  function save(key, val) { try { localStorage.setItem(key, val); } catch (e) {} }
+
+  let best = parseFloat(load(BEST_KEY)) || null;
+  let soundOn = load(SOUND_KEY) !== 'off';
+
+  // 効果音
+  let audioCtx = null;
+  function beep(freq, duration, type = 'sine', volume = 0.15) {
+    if (!soundOn) return;
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(volume, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + duration);
+  }
+  const sfx = {
+    tap: n => beep(440 + n * 18, 0.08, 'triangle'),
+    miss: () => beep(140, 0.18, 'square', 0.08),
+    clear: () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.18, 'triangle'), i * 90)),
+  };
+
+  function renderBest() { bestEl.textContent = best ? best.toFixed(2) : '--'; }
+  function renderSound() { soundBtn.textContent = soundOn ? '🔊 音ON' : '🔇 音OFF'; }
+
+  function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function buildBoard() {
+    boardEl.innerHTML = '';
+    const nums = shuffle(Array.from({ length: SIZE }, (_, i) => i + 1));
+    nums.forEach(n => {
+      const btn = document.createElement('button');
+      btn.className = 'cell';
+      btn.textContent = n;
+      btn.addEventListener('pointerdown', e => { e.preventDefault(); onTap(btn, n); });
+      boardEl.appendChild(btn);
+    });
+  }
+
+  function onTap(btn, n) {
+    if (!playing || btn.classList.contains('done')) return;
+    if (n === next) {
+      btn.classList.add('done');
+      sfx.tap(n);
+      next++;
+      if (next > SIZE) finish();
+      else nextEl.textContent = next;
+    } else {
+      sfx.miss();
+      btn.classList.remove('miss');
+      void btn.offsetWidth; // 揺れ演出を毎回やり直す
+      btn.classList.add('miss');
+      setTimeout(() => btn.classList.remove('miss'), 250);
+    }
+  }
+
+  function tick() { timeEl.textContent = ((performance.now() - startTime) / 1000).toFixed(2); }
+
+  function start() {
+    buildBoard();
+    next = 1;
+    nextEl.textContent = next;
+    timeEl.textContent = '0.00';
+    overlay.classList.add('hidden');
+    playing = true;
+    startTime = performance.now();
+    timerId = setInterval(tick, 10);
+    beep(660, 0.1, 'triangle'); // スマホで音を有効にするため最初の操作で鳴らす
+  }
+
+  function finish() {
+    playing = false;
+    clearInterval(timerId);
+    const sec = (performance.now() - startTime) / 1000;
+    timeEl.textContent = sec.toFixed(2);
+    nextEl.textContent = '✓';
+    const isBest = !best || sec < best;
+    if (isBest) {
+      best = sec;
+      save(BEST_KEY, sec.toFixed(2));
+      renderBest();
+    }
+    sfx.clear();
+    msgEl.textContent = 'クリア！';
+    resultEl.textContent = sec.toFixed(2) + ' 秒';
+    resultEl.hidden = false;
+    newBestEl.hidden = !isBest;
+    startBtn.textContent = 'もう一度';
+    overlay.classList.remove('hidden');
+  }
+
+  startBtn.addEventListener('click', start);
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    save(SOUND_KEY, soundOn ? 'on' : 'off');
+    renderSound();
+  });
+
+  buildBoard();
+  renderBest();
+  renderSound();
+</script>
+</body>
+</html>
